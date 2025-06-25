@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"syscall/js"
 	"time"
 
@@ -14,14 +15,20 @@ var (
 	gsap     js.Value = js.Global().Get("gsap")
 	//lrcText  string   = js.Global().Get("lrcText").String()
 
-	// window        js.Value = js.Global().Get("window")
+	window js.Value = js.Global()
 	// console       js.Value = js.Global().Get("console")
-	// alert         js.Value = js.Global().Get("alert")
+	alert js.Value = js.Global().Get("alert")
 	// setTimeout    js.Value = js.Global().Get("setTimeout")
 	// setInterval   js.Value = js.Global().Get("setInterval")
 	// clearTimeout  js.Value = js.Global().Get("clearTimeout")
 	// clearInterval js.Value = js.Global().Get("clearInterval")
-	bglw = 30
+	bglw       = 100
+	fadeRatio  = 1.0
+	dialogEle  = document.Call("getElementById", "dialog")
+	musicInput = document.Call("getElementById", "ex_music")
+	coverInput = document.Call("getElementById", "ex_cover")
+	ttmlInput  = document.Call("getElementById", "ex_ttml")
+	compBtn    = document.Call("getElementById", "comp_ex")
 )
 
 var previousIndex = make([]int, 0)
@@ -31,9 +38,9 @@ var noePlayingOne = -1
 var trans = "background 0.7s, filter 0.5s, opacity 0.5s"
 var audio js.Value
 var hasScrolledInRemove bool
+var c = make(chan struct{}, 0)
 
 func main() {
-	c := make(chan struct{}, 0)
 	//const urlParams = new URLSearchParams(window.location.search);
 	//const musicName = urlParams.get("m") || "ME!";
 	//const musicType = urlParams.get("t") || "mp3";
@@ -43,28 +50,120 @@ func main() {
 	lrcView := document.Call("getElementById", "lrcView")
 
 	//document.Get("body").Call("append", lrcView)
-
+	audio = js.Global().Get("Audio").New()
 	var urlParams = js.Global().Get("URLSearchParams").New(location.Get("search"))
 	musicName := urlParams.Call("get", "m").String()
 	musicType := urlParams.Call("get", "t").String()
-	if musicName == "" {
+	exFile := urlParams.Call("get", "e").String()
+	if musicName == js.Null().String() {
 		musicName = "ME!"
 	}
-	if musicType == "" {
+	if musicType == js.Null().String() {
 		musicType = "mp3"
 	}
+	if exFile == js.Null().String() {
+		exFile = "false"
+	}
+	bgsrc := ""
+	lrcText := ""
+	compBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		if exFile == "false" {
+			return nil
+		}
+		if musicInput.Get("files").Length() == 0 {
+			window.Call("alert", "请选择歌词文件")
+			return nil
+		}
+		if coverInput.Get("files").Length() == 0 {
+			window.Call("alert", "请选择封面文件")
+			return nil
+		}
+		if ttmlInput.Get("files").Length() == 0 {
+			window.Call("alert", "请选择ttml文件")
+			return nil
+		}
+		// 将音频转换为在线地址
+		//reader := js.Global().Get("FileReader").New()
+		//reader.Call("addEventListener", "load", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		//	var base64 = reader.Get("result").String()
+		//	fmt.Println(base64)
+		//	audio.Set("src", base64)
+		//	i++
+		//	if i == 3 {
+		//
+		//		go start(lrcText, bgsrc, lrcView)
+		//	}
+		//	return nil
+		//}))
+		//reader.Call("readAsDataURL", musicInput.Get("files").Index(0))
 
+		// 读取cover
+		//reader = js.Global().Get("FileReader").New()
+		//reader.Call("addEventListener", "load", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		//	var base64 = reader.Get("result").String()
+		//	fmt.Println(base64)
+		//	bgsrc = base64
+		//	i++
+		//	if i == 3 {
+		//
+		//		go start(lrcText, bgsrc, lrcView)
+		//	}
+		//
+		//	return nil
+		//}))
+		//reader.Call("readAsDataURL", coverInput.Get("files").Index(0))
+
+		url := window.Get("URL").Call("createObjectURL", musicInput.Get("files").Index(0))
+		audio.Set("src", url)
+		url = window.Get("URL").Call("createObjectURL", coverInput.Get("files").Index(0))
+		bgsrc = url.String()
+
+		// 读取ttml文本
+		reader := js.Global().Get("FileReader").New()
+		reader.Call("addEventListener", "load", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+			var base64 = reader.Get("result").String()
+			//
+			lrcText = base64
+
+			go start(lrcText, bgsrc, lrcView)
+			return nil
+		}))
+
+		reader.Call("readAsText", ttmlInput.Get("files").Index(0))
+
+		dialogEle.Get("classList").Call("remove", "show")
+		return nil
+	}))
+	if location.Get("hash").String() != "" {
+		getFile := getLrcText(location.Get("hash").String()[1:], "json")
+		audio.Set("src", getFile.Get("song").String())
+		bgsrc = getFile.Get("meta").Get("albumImgSrc").String()
+		lrcText = getLrcText(getFile.Get("meta").Get("lyrics").String(), "text").String()
+		go start(lrcText, bgsrc, lrcView)
+	} else {
+		if exFile != "false" {
+			// 让用户选中歌曲，歌词，封面
+			dialogEle.Get("classList").Call("add", "show")
+		} else {
+			audio.Set("src", "/music/"+musicName+"."+musicType)
+			bgsrc = "/music/" + musicName + ".png"
+			lrcText = getLrcText("/music/"+musicName+".ttml", "text").String()
+
+			go start(lrcText, bgsrc, lrcView)
+		}
+	}
+
+	<-c
+}
+
+func start(lrcText string, bgsrc string, lrcView js.Value) {
 	// 获取所有包含data-muaic-background属性的img元素
 	backgroundImages := document.Call("querySelectorAll", "[data-muaic-background]")
 	for i := 0; i < backgroundImages.Length(); i++ {
 
 		img := backgroundImages.Index(i)
-		img.Set("src", "./music/"+musicName+".png")
+		img.Set("src", bgsrc)
 	}
-
-	audio = js.Global().Get("Audio").New("./music/" + musicName + "." + musicType)
-
-	lrcText := getLrcText("/music/" + musicName + ".ttml")
 
 	println(lrcText)
 	vld, err := ParseTTML(lrcText, lrcView)
@@ -111,6 +210,13 @@ func main() {
 	}))
 	audio.Call("addEventListener", "pause", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		pauseLrc(vld)
+		return nil
+	}))
+
+	// 窗口缩放事件
+	window.Call("addEventListener", "resize", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		initLrcBackground(vld)
+		rPosition(vld)
 		return nil
 	}))
 	GsetInterval(
@@ -180,8 +286,8 @@ func playLrc(lrcs *lyrics.Lyrics) {
 	for _, index := range nowPlayingIndex {
 		item := lrcs.Contents[index]
 		for _, item1 := range item.Primary.Blocks {
-			if !item1.GsapAnimation.IsUndefined() && !item1.GsapAnimation.IsNull() && item1.GsapAnimation.Type() == js.TypeObject && item1.GsapAnimation.Call("progress").Float() != float64(1) {
-				item1.GsapAnimation.Call("resume")
+			if !item1.GsapAnimation.IsUndefined() && !item1.GsapAnimation.IsNull() && item1.GsapAnimation.Get("overallProgress").Float() != float64(1) {
+				item1.GsapAnimation.Call("play")
 			}
 			if !item1.TextUpAnimation.IsUndefined() && !item1.TextUpAnimation.IsNull() && item1.TextUpAnimation.Get("overallProgress").Float() != float64(1) {
 				item1.TextUpAnimation.Call("play")
@@ -199,7 +305,7 @@ func playLrc(lrcs *lyrics.Lyrics) {
 					item3.TextUpAnimation.Call("play")
 				}
 				if !item3.GsapAnimation.IsUndefined() && !item3.GsapAnimation.IsNull() {
-					item3.GsapAnimation.Call("resume")
+					item3.GsapAnimation.Call("play")
 				}
 
 				for _, item4 := range item3.HighLightAnimations {
@@ -212,16 +318,16 @@ func playLrc(lrcs *lyrics.Lyrics) {
 	}
 }
 
-func getLrcText(path string) string {
+func getLrcText(path string, Type string) js.Value {
 	done := make(chan struct{})
-	var responseData string
+	var responseData js.Value
 
 	// 使用 JavaScript 的 fetch API 发送请求
 	promise := js.Global().Call("fetch", path)
 	promise.Call("then", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		response := args[0]
-		response.Call("text").Call("then", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-			responseData = args[0].String()
+		response.Call(Type).Call("then", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+			responseData = args[0]
 			close(done) // 通知请求完成
 			return nil
 		}))
@@ -356,6 +462,19 @@ func gd(currentIndex int, lrc *lyrics.Lyrics, init bool) {
 		//item.Ele.Get("style").Call("setProperty", "--top", fmt.Sprintf("%dpx", item.Position))
 		// item.ScrollAnimation 不为空的话
 
+	}
+}
+
+func rPosition(lrc *lyrics.Lyrics) {
+	in := bubbleSort(nowPlayingIndex)
+	i := 0
+	if len(in) > 0 {
+		i = in[0]
+	}
+	for index, item := range lrc.Contents {
+		top := getTopHeight(lrc, i, index)
+		item.Ele.Get("style").Call("setProperty", "transform", "translate(0px,"+strconv.Itoa(top)+"px)")
+		item.Position = top
 	}
 }
 func getCurrentTime(audio js.Value) time.Duration {

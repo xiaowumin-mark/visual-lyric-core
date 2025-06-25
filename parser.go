@@ -11,10 +11,16 @@ import (
 	lyrics "github.com/xiaowumin-mark/visual-lyric-core/lyric" // 假设 lyrics 包定义了 Lyrics 结构体
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/go-ego/gse"
 	"github.com/samber/lo"
 	"golang.org/x/net/html"
 )
 
+var seg gse.Segmenter
+
+func init() {
+	seg.LoadDict()
+}
 func ParseTTML(raw string, maindom js.Value) (*lyrics.Lyrics, error) {
 	result := lyrics.NewEmptyLyrics()
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(raw))
@@ -60,6 +66,9 @@ func ParseTTML(raw string, maindom js.Value) (*lyrics.Lyrics, error) {
 		}
 		item.Primary.Ele.Get("classList").Call("add", "main_lrc")
 
+		segments := seg.Segment([]byte(item.Primary.Ele.Get("innerText").String()))
+		// 处理分词结果, 普通模式
+		fmt.Println(gse.ToString(segments))
 		maindom.Call("append", item.Ele)
 		if len(item.Primary.Translates) != 0 {
 			item.Ele.Call("append", item.Primary.TranslateEle)
@@ -76,17 +85,26 @@ func ParseTTML(raw string, maindom js.Value) (*lyrics.Lyrics, error) {
 					bgEle.Call("append", item2.TranslateEle)
 				}
 
-				if item2.End > item.Primary.End {
-					item.Primary.End = item2.End
-				}
+				//if item2.End > item.Primary.End {
+				//	item.Primary.End = item2.End
+				//}
 
 				item.Ele.Call("append", bgEle)
 			}
 		}
 
 		for _, item3 := range item.Primary.Blocks {
+			if item3.Begin == 0 && item3.End == 0 {
+				continue
+			}
 
-			if time.Duration(item3.End-item3.Begin) > time.Duration(1500)*time.Millisecond && len(item3.Text) < 8 {
+			backgroundImage, backgroundSize, backgroungPX, _ := generateBackgroundFadeStyle(item3.Ele.Get("offsetWidth").Float(), item3.Ele.Get("offsetHeight").Float(), fadeRatio)
+			item3.Ele.Get("style").Set("backgroundImage", backgroundImage)
+			item3.Ele.Get("style").Set("backgroundSize", backgroundSize)
+			item3.Ele.Get("style").Set("backgroundPositionX", fmt.Sprintf("%vpx", backgroungPX))
+			fmt.Println(backgroundImage, backgroundSize, backgroungPX)
+
+			if time.Duration(item3.End-item3.Begin) > time.Duration(1000)*time.Millisecond && len(item3.Text) < 8 {
 				text := item3.Ele.Get("innerHTML").String()
 				item3.Ele.Set("innerHTML", "")
 				for _, ite := range text {
@@ -94,7 +112,7 @@ func ParseTTML(raw string, maindom js.Value) (*lyrics.Lyrics, error) {
 					blank.Set("className", "hl_text")
 					blank.Set("innerHTML", js.ValueOf(string(ite)))
 					blank.Call("setAttribute", "data-text", string(ite))
-					blank.Get("style").Call("setProperty", "--p", "0%")
+					blank.Get("style").Call("setProperty", "--p", "0px")
 					item3.Ele.Call("append", blank)
 				}
 			}
@@ -229,7 +247,8 @@ func parseContent(p *html.Node, mainAgent, defaultAgent string) (*lyrics.Content
 				textele := document.Call("createElement", "div")
 				textele.Set("className", "char")
 				textele.Get("style").Call("setProperty", "--color", "0.2")
-				textele.Get("style").Call("setProperty", "--p", "-40%")
+				//textele.Get("style").Call("setProperty", "--p", fmt.Sprintf("%vpx", 0))
+
 				textele.Get("style").Call("setProperty", "--rp", "0%")
 				textele.Get("style").Call("setProperty", "--rcolor", "1")
 				textele.Get("style").Set("transform", "translateY(10px)")
@@ -400,4 +419,16 @@ func parseTimestamp(timestamp string) (time.Duration, error) {
 	// Convert everything to nanoseconds
 	totalNanoseconds := (hours*3600+minutes*60+seconds)*1e9 + milliseconds*1e6
 	return time.Duration(totalNanoseconds), nil
+}
+
+func initLrcBackground(lrc *lyrics.Lyrics) {
+
+	for _, content := range lrc.Contents {
+		for _, pitem := range content.Primary.Blocks {
+			backgroundImage, backgroundSize, backgroungPX, _ := generateBackgroundFadeStyle(pitem.Ele.Get("offsetWidth").Float(), pitem.Ele.Get("offsetHeight").Float(), fadeRatio)
+			pitem.Ele.Get("style").Set("backgroundImage", backgroundImage)
+			pitem.Ele.Get("style").Set("backgroundSize", backgroundSize)
+			pitem.Ele.Get("style").Set("backgroundPositionX", fmt.Sprintf("%vpx", backgroungPX))
+		}
+	}
 }

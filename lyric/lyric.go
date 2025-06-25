@@ -52,6 +52,7 @@ type Line struct {
 	Blocks       []*Block          // 歌词块
 	Ele          js.Value
 	TranslateEle js.Value
+	Splits       []string
 }
 
 // Block 结构体表示歌词中的一个块（单词或空格）
@@ -64,6 +65,7 @@ type Block struct {
 	TextUpAnimation              js.Value
 	HighLightAnimations          []js.Value
 	HighLightBackgroungAnimation []js.Value
+	AheadtrAnimation             js.Value
 }
 
 // 定义外部引用来源

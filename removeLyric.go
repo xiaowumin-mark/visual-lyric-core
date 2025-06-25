@@ -26,7 +26,7 @@ func removeLyric(index int, lrcs *lyrics.Lyrics) {
 					"duration": 0.2,
 					"--rcolor": 0.2,
 					"onComplete": js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-						word.Ele.Get("style").Call("setProperty", "--p", "-40%")
+						word.Ele.Get("style").Call("setProperty", "--p", "0px")
 						word.Ele.Get("style").Call("setProperty", "--rp", "0%")
 						word.Ele.Get("style").Call("setProperty", "--rcolor", "1")
 						return nil
@@ -57,15 +57,20 @@ func removeLyric(index int, lrcs *lyrics.Lyrics) {
 			"duration": 0.6,
 			"--rcolor": 0.2,
 			"onComplete": js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-				word.Ele.Get("style").Call("setProperty", "--p", "-40%")
+				word.Ele.Get("style").Call("setProperty", "--p", fmt.Sprintf("%vpx", 0))
 				word.Ele.Get("style").Call("setProperty", "--rp", "0%")
 				word.Ele.Get("style").Call("setProperty", "--rcolor", "1")
+
+				word.GsapAnimation.Call("cancel")
+				word.GsapAnimation = js.Null()
+
+				word.Ele.Get("style").Set("backgroundPositionX", fmt.Sprintf("%vpx", -getFPX(word.Ele.Get("offsetWidth").Float(), word.Ele.Get("offsetHeight").Float(), fadeRatio)))
 				fmt.Println("onComplete")
 				for i := 0; i < len(word.HighLightBackgroungAnimation); i++ {
 					ite := bgChildren.Index(i)
 					word.HighLightBackgroungAnimation[i].Call("kill")
 					gsap.Call("set", ite, map[string]interface{}{
-						"--p": "0%",
+						"--p": fmt.Sprintf("%vpx", 0),
 					})
 					fmt.Println("kill")
 				}
@@ -73,10 +78,6 @@ func removeLyric(index int, lrcs *lyrics.Lyrics) {
 				return nil
 			}),
 		})
-
-		word.GsapAnimation.Call("kill")
-
-		word.GsapAnimation = js.Null()
 
 		word.TextUpAnimation.Call("pause")
 
