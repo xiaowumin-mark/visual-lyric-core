@@ -23,53 +23,95 @@ func addLyric(index int, lrcs *lyrics.Lyrics) {
 	//lineTimeE := math.Min(float64(lrcs.Contents[index].Primary.End), float64(lrcs.Contents[index].Primary.Blocks[len(lrcs.Contents[index].Primary.Blocks)-1].End))
 	//lineTimeB := math.Max(float64(lrcs.Contents[index].Primary.Begin), float64(lrcs.Contents[index].Primary.Blocks[0].Begin))
 	//lineTime := lineTimeE - lineTimeB
-	lineTime := lrcs.Contents[index].Primary.End - lrcs.Contents[index].Primary.Begin
+	lineTime := lrcs.Contents[index].Primary.Blocks[len(lrcs.Contents[index].Primary.Blocks)-1].End - lrcs.Contents[index].Primary.Begin
+	if lineTime < 0 {
+		lineTime = lrcs.Contents[index].Primary.End - lrcs.Contents[index].Primary.Begin
+	}
 	fmt.Println(time.Duration(lineTime).Milliseconds())
 
-	if len(lrcs.Contents[index].Backgrounds) != 0 {
-		lrcs.Contents[index].BackgroundsEle.Get("style").Set("display", "block")
-		GsetTimeout(func() {
-			lrcs.Contents[index].BackgroundsEle.Get("classList").Call("add", "bgShow")
+	gsap.Call("to", lrcs.Contents[index].Ele, map[string]interface{}{
+		"duration": 0.5,
+		"scale":    1.05,
+		"delay":    0.1,
+	})
 
-			GsetTimeout(func() {
-				gd(bubbleSort(nowPlayingIndex)[0], lrcs, false)
-			}, 50*time.Millisecond)
-		}, 10*time.Millisecond)
+	if len(lrcs.Contents[index].Backgrounds) != 0 {
+		//lrcs.Contents[index].BackgroundsEle.Get("style").Set("display", "block")
+		//GsetTimeout(func() {
+		//lrcs.Contents[index].BackgroundsEle.Get("classList").Call("add", "bgShow")
+		lrcs.Contents[index].ShowBackgrounds = true
+		GsetTimeout(func() {
+			gd(bubbleSort(nowPlayingIndex)[0], lrcs, false)
+		}, 50*time.Millisecond)
+		//}, 10*time.Millisecond)
 
 		for _, item := range lrcs.Contents[index].Backgrounds {
+
+			//item.Ele.Call("animate", []interface{}{
+			//	map[string]interface{}{
+			//		"opacity":   0,
+			//		"transform": "scale(0.8) " + item.Ele.Get("style").Get("transform").String(),
+			//	},
+			//	map[string]interface{}{
+			//		"opacity":   1,
+			//		"transform": "scale(1) " + item.Ele.Get("style").Get("transform").String(),
+			//	},
+			//}, map[string]interface{}{
+			//	"duration": 500,
+			//	"fill":     "forwards",
+			//	"easing":   "ease-out",
+			//})
+			gsap.Call("to", item.Ele, map[string]interface{}{
+				"opacity":  1,
+				"scale":    1,
+				"duration": 0.5,
+				"delay":    0.2,
+			})
+
+			bgLineTime := item.Blocks[len(item.Blocks)-1].End - item.Blocks[0].Begin
+			delay := item.Blocks[0].Begin - lrcs.Contents[index].Primary.Begin
+			var bgWordsN []*lyrics.Block
 			for _, word := range item.Blocks {
-				intervalTime := word.Begin - currentTime
-				//word.Ele.Get("style").Call("setProperty", "--p", "100%")
-				//word.Ele.Get("style").Call("setProperty", "--rp", "140%")
-				duration := word.End - word.Begin
-
-				eleWidth := word.Ele.Get("offsetWidth").Float()
-
-				oPeo := float64(bglw) + eleWidth
-
-				V := eleWidth / duration.Seconds() // 原速度（100% / duration）
-
-				// 计算 20px 过渡的额外时间
-				//extraTime := (float64(bglw) * 1 / eleWidth * 100) / (oPeo / duration.Seconds())
-
-				// 调整后的动画时间（保持速度 V 不变）
-				nT := oPeo / V
-
-				animation := gsap.Call("to", word.Ele, map[string]interface{}{
-					// duration单位为秒
-					//"duration": duration.Seconds() * 1.05,
-					"duration": nT,
-					"ease":     "none",
-					//"--p":      "100%",
-					//"--rp":     "140%",
-					// 延时触发
-					//"delay": intervalTime.Seconds() * 0.95,
-					"--p": fmt.Sprintf("%vpx", oPeo),
-
-					"delay": intervalTime.Seconds(),
+				backgroundImage, backgroundSize, backgroungPX, _ := generateBackgroundFadeStyle(word.Ele.Get("offsetWidth").Float(), word.Ele.Get("offsetHeight").Float(), bgfadeRatio)
+				word.Ele.Get("style").Set("backgroundImage", backgroundImage)
+				word.Ele.Get("style").Set("backgroundSize", backgroundSize)
+				word.Ele.Get("style").Set("backgroundPositionX", fmt.Sprintf("%vpx", backgroungPX))
+				if word.Begin == 0 && word.End == 0 {
+					continue
+				}
+				bgWordsN = append(bgWordsN, word)
+			}
+			for wi, word := range bgWordsN {
+				frame := createFrames(bgWordsN, wi, bgLineTime, bgfadeRatio)
+				animate := word.Ele.Call("animate", js.ValueOf(frame), map[string]interface{}{
+					"duration": bgLineTime.Milliseconds(),
+					"easing":   "linear",
+					"fill":     "forwards",
+					"delay":    delay.Milliseconds(),
 				})
-				word.GsapAnimation = animation
+				word.Animation = append(word.Animation, animate)
 
+				intervalTime := word.Begin - currentTime
+
+				// 计算动画参数
+				duration := word.End - word.Begin
+				upAnimateTime := duration.Milliseconds() + 700
+				aimt := word.Ele.Call("animate", []interface{}{
+					map[string]interface{}{},
+					map[string]interface{}{
+						"transform": "translateY(5px)",
+						//"marginTop": "-5px",
+					},
+				},
+					map[string]interface{}{
+						"duration": upAnimateTime,
+						"easing":   "ease-out",
+						//"delay":    (intervalTime.Milliseconds() * 95 / 100),
+						"delay": float64(intervalTime.Milliseconds()),
+						"fill":  "forwards",
+					},
+				)
+				word.TextUpAnimation = aimt
 			}
 		}
 	} else {
@@ -82,139 +124,61 @@ func addLyric(index int, lrcs *lyrics.Lyrics) {
 		//hasScrolledInRemove = false // 重置标志位
 	}
 	var wordsN []*lyrics.Block
+	var wordsWS []*lyrics.Block
+
+	lrcs.Contents[index].Ele.Get("style").Set("filter", "blur(0px)")
 
 	for _, word := range words {
 		if word.Begin == 0 && word.End == 0 {
 			continue
 		}
 		wordsN = append(wordsN, word)
+
+		var bgChildren js.Value = word.Ele.Get("children")
+		if bgChildren.Length() > 0 {
+			wsitemTime := (word.End - word.Begin) / time.Duration(bgChildren.Length())
+			for i := 0; i < bgChildren.Length(); i++ {
+				var bgChild js.Value = bgChildren.Index(i)
+				wordsWS = append(wordsWS, &lyrics.Block{
+					Ele:   bgChild,
+					Text:  bgChild.Get("innerHTML").String(),
+					Begin: time.Duration(word.Begin) + time.Duration(i)*wsitemTime,
+					End:   time.Duration(word.Begin) + time.Duration(i+1)*wsitemTime,
+				})
+			}
+		} else {
+			wordsWS = append(wordsWS, word)
+		}
+	}
+	var lineWordsAnimates []js.Value
+	//curX := 0.0 // 累积偏移量（整行动画进度）
+	log.Println("lineTime:", lineTime)
+	for wi, word := range wordsWS {
+		log.Println(wordsN[len(wordsN)-1].End.Seconds(), wordsN[0].Begin.Seconds())
+		frame := createFrames(wordsWS, wi, wordsN[len(wordsN)-1].End-wordsN[0].Begin, fadeRatio)
+		wordAimate := word.Ele.Call("animate", js.ValueOf(frame), map[string]interface{}{
+			"duration": time.Duration(lineTime).Milliseconds(),
+			"easing":   "linear",
+			"fill":     "forwards",
+		})
+		//word.Animation = append(word.Animation, wordAimate)
+		lineWordsAnimates = append(lineWordsAnimates, wordAimate)
 	}
 
-	//curX := 0.0 // 累积偏移量（整行动画进度）
-	for wi, word := range wordsN {
-		//laspv := 0.0
-		//for _, word := range words {
-		//	laspv += math.Max(float64(word.End), laspv)
-		//}
-		//
-		//totalFadeDuration := float64(lrcs.Contents[index].Primary.End) - float64(lrcs.Contents[index].Primary.Begin)
-		////for _, w := range words {
-		////	totalFadeDuration = math.Max(float64(w.End), totalFadeDuration)
-		////}
-		////totalFadeDuration = math.Max(float64(lrcs.Contents[index].Primary.End), totalFadeDuration)
-		////totalFadeDuration -= float64(lrcs.Contents[index].Primary.Begin)
-		////totalFadeDuration := math.Max(laspv, float64(lrcs.Contents[index].Primary.End)) - float64(lrcs.Contents[index].Primary.Begin)
-		//wordEle := word.Ele
-		//wordWidth := wordEle.Get("offsetWidth").Float()
-		////wordHeight := wordEle.Get("offsetHeight").Float()
-		//fadeWidth := wordWidth * fadeRatio
-		//
-		//widthBeforeSelf := 0.0
-		//for i := 0; i < wi; i++ {
-		//	widthBeforeSelf += words[i].Ele.Get("offsetWidth").Float()
-		//}
-		//minOffset := -(wordWidth + fadeWidth)
-		//clampOffset := func(x float64) float64 {
-		//	return math.Max(math.Min(x, 0), minOffset)
-		//}
-		//curPos := -widthBeforeSelf - wordWidth - fadeWidth
-		//timeOffset := time.Duration(0)
-		//
-		//var frames []interface{}
-		//
-		//lastPos := curPos
-		//lastTime := time.Duration(0)
-		//
-		//pushFrame := func() {
-		//	moveOffset := curPos - lastPos
-		//	time_ := math.Max(0, math.Min(1, float64(timeOffset)))
-		//	duration := time_ - float64(lastTime)
-		//	d := math.Abs(duration / moveOffset)
-		//	if curPos > minOffset && lastPos < minOffset {
-		//		staticTime := math.Abs(lastPos-minOffset) * d
-		//		//value := `${clampOffset(lastPos)}px 0`;
-		//		value := fmt.Sprintf("%vpx 0", clampOffset(curPos))
-		//		//const frame: Keyframe = {
-		//		//	offset: lastTime + staticTime,
-		//		//	maskPosition: value,
-		//		//};
-		//		//frames.push(frame);
-		//		frame := map[string]interface{}{
-		//			"offset":             float64(lastTime) + staticTime,
-		//			"backgroundPosition": value,
-		//		}
-		//
-		//		frames = append(frames, frame)
-		//	}
-		//	if curPos > 0 && lastPos < 0 {
-		//		staticTime := math.Abs(lastPos) * d
-		//		value := fmt.Sprintf("%vpx 0", clampOffset(curPos))
-		//		frame := map[string]interface{}{
-		//			"offset":             float64(lastTime) + staticTime,
-		//			"backgroundPosition": value,
-		//		}
-		//
-		//		frames = append(frames, frame)
-		//	}
-		//
-		//	//value := `${clampOffset(curPos)}px 0`
-		//	value := fmt.Sprintf("%vpx 0", clampOffset(curPos))
-		//	frame := map[string]interface{}{
-		//		"offset":             time_,
-		//		"backgroundPosition": value,
-		//	}
-		//
-		//	frames = append(frames, frame)
-		//	lastPos = curPos
-		//	lastTime = time.Duration(time_)
-		//
-		//}
-		//
-		//pushFrame()
-		//
-		//lastTimeStamp := time.Duration(0)
-		//
-		//for j, otherWord := range words {
-		//	curTimeStamp := otherWord.Begin - lrcs.Contents[index].Primary.Begin
-		//	staticDuration := curTimeStamp - lastTimeStamp
-		//	timeOffset += staticDuration / time.Duration(totalFadeDuration)
-		//	if staticDuration > 0 {
-		//		pushFrame()
-		//	}
-		//	lastTimeStamp = curTimeStamp
-		//
-		//	fadeDuration := otherWord.End - otherWord.Begin
-		//	timeOffset += fadeDuration / time.Duration(totalFadeDuration)
-		//	curPos += otherWord.Ele.Get("offsetWidth").Float()
-		//	if j == 0 {
-		//		curPos += fadeWidth * 1.5
-		//	}
-		//	if j == len(lrcs.Contents[index].Primary.Blocks)-1 {
-		//		curPos += fadeWidth * 0.5
-		//	}
-		//	if fadeDuration > 0 {
-		//		pushFrame()
-		//	}
-		//	lastTimeStamp += fadeDuration
-		//}
-		//fmt.Println(frames)
-		//anim := word.Ele.Call("animate", frames, map[string]interface{}{
-		//	"duration": 1000,
-		//	"easing":   "linear",
-		//	"fill":     "both",
-		//})
-		//anim.Call("play")
-		//fmt.Println(totalFadeDuration)
-		//if anim.Truthy() {
-		//	progress := currentTime - word.Begin
-		//	if progress >= 0 && progress <= (word.End-word.Begin) {
-		//		fmt.Println(progress)
-		//		anim.Set("currentTime", float64(progress))
-		//		anim.Call("play")
-		//	} else {
-		//		anim.Call("pause")
-		//	}
-		//}
+	lastWordWSIndex := 0
+	// 将lineWordsAnimates和wordsN绑定
+	for _, wordItem := range wordsN {
+		var bgChildren js.Value = wordItem.Ele.Get("children")
+		if bgChildren.Length() > 0 {
+			wordItem.Animation = lineWordsAnimates[lastWordWSIndex : lastWordWSIndex+bgChildren.Length()]
+			lastWordWSIndex += bgChildren.Length()
+		} else {
+			wordItem.Animation = append(wordItem.Animation, lineWordsAnimates[lastWordWSIndex])
+			lastWordWSIndex += 1
+		}
+
+	}
+	for _, word := range words {
 
 		if word.Begin == 0 && word.End == 0 {
 			continue
@@ -223,128 +187,6 @@ func addLyric(index int, lrcs *lyrics.Lyrics) {
 
 		// 计算动画参数
 		duration := word.End - word.Begin
-		//eleWidth := word.Ele.Get("offsetWidth").Float()
-		//oPeo := float64(bglw) + eleWidth
-		//oldV := eleWidth / duration.Seconds()
-		//newT := (eleWidth + float64(bglw)) / oldV
-		//newV := (eleWidth + float64(bglw)) / newT
-		//nT := (eleWidth / newV) + float64(bglw)/newV
-		// 设置 GSAP 动画
-		//animation := gsap.Call("to", word.Ele, map[string]interface{}{
-		//	"duration": duration.Seconds(),
-		//	//"duration": 0,
-		//	"ease": "none",
-		//	//"--p":   fmt.Sprintf("%vpx", oPeo),
-		//	"background-position-x": "0px",
-		//	"delay":                 (intervalTime.Seconds()),
-		//})
-		//
-		//if wi+1 < len(words) {
-		//	frx := getFPX(word.Ele.Get("offsetWidth").Float(), word.Ele.Get("offsetHeight").Float(), fadeRatio)
-		//	v := frx / duration.Seconds()
-		//	t := words[wi+1].Ele.Get("offsetWidth").Float() / v
-		//	fmt.Println(t)
-		//	//intTime := words[wi+1].Begin - currentTime
-		//	gsap.Call("to", words[wi+1].Ele, map[string]interface{}{
-		//		"duration": t,
-		//		//"duration": 0,
-		//		"ease": "none",
-		//		//"--p":   fmt.Sprintf("%vpx", oPeo),
-		//		"background-position-x": fmt.Sprintf("%vpx", -words[wi+1].Ele.Get("offsetWidth").Float()),
-		//		"delay":                 (intervalTime.Seconds() + duration.Seconds() - t),
-		//	})
-		//}
-
-		// 计算时间
-		//startOffset := word.Begin - lrcs.Contents[index].Primary.Begin
-
-		//wordWidth := word.Ele.Get("offsetWidth").Float()
-		//height := word.Ele.Get("offsetHeight").Float()
-		// 渐变宽度（推荐统一计算）
-		//width := wordWidth // 已测量好的宽度
-		///fadeW := height * fadeRatio
-		//totalMove := width + fadeW*2
-
-		// 计算动画起止位置
-		//fromX := -curX - totalMove
-		//toX := -curX
-
-		// 动画
-		//animation := gsap.Call("to", word.Ele,
-		//	map[string]interface{}{
-		//		"background-position-x": "0px",
-		//		"duration":              duration.Seconds(),
-		//		"delay":                 startOffset.Seconds(),
-		//		"ease":                  "none",
-		//	})
-		//
-		//curX += width
-		//animation.Call("eventCallback", "onComplete", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		//	// word.AheadtrAnimation是否为空
-		//	if !word.AheadtrAnimation.IsUndefined() && !word.AheadtrAnimation.IsNull() {
-		//		fmt.Println("kill Animation")
-		//		word.AheadtrAnimation.Call("pause")
-		//		word.AheadtrAnimation.Call("kill")
-		//		// 让animation的进度完成
-		//		animation.Call("kill")
-		//	}
-		//	return nil
-		//}))
-		//fmt.Println((intervalTime.Seconds()))
-		//if wi+1 < len(words) {
-		//	word.AheadtrAnimation = gsap.Call("to", words[wi+1].Ele, map[string]interface{}{
-		//		"duration": getLastOffsetTime(wi-1, lrcs.Contents[index].Primary).Seconds(),
-		//		"ease":     "none",
-		//		"--p":      fmt.Sprintf("%vpx", bglw),
-		//		"delay":    (intervalTime.Seconds() + (eleWidth / newV)),
-		//	})
-		//
-		//}
-		//word.GsapAnimation = animation
-
-		//GsetTimeout(func() {
-
-		//fst := time.Duration(0)
-		//f wi+1 < len(words) {
-		//	fmt.Println(word.Text, "----------------", words[wi+1].Text)
-		//	d := getLastOffsetTime(wi+1, lrcs.Contents[index].Primary)
-		//	ofst += d
-		//	fmt.Println(d.Seconds())
-		//	intTime := words[wi].End - currentTime
-		//	words[wi+1].Ele.Call("animate", []interface{}{
-		//		map[string]interface{}{
-		//			"backgroundPositionX": fmt.Sprintf("%vpx", -words[wi+1].Ele.Get("offsetWidth").Float()),
-		//		}},
-		//		map[string]interface{}{
-		//			"duration": d.Milliseconds(),
-		//			"easing":   "linear",
-		//			"delay":    float64(intTime.Milliseconds()) - (word.Ele.Get("offsetHeight").Float()*fadeRatio)/(word.Ele.Get("offsetHeight").Float()/float64(duration.Milliseconds())),
-		//			"fill":     "forwards",
-		//		},
-		//	)
-		//
-		//nimation := word.Ele.Call("animate", []interface{}{
-		//	map[string]interface{}{
-		//		"backgroundPositionX": "0px",
-		//	}},
-		//	map[string]interface{}{
-		//		"duration": duration.Milliseconds(),
-		//		"easing":   "linear",
-		//		"delay":    float64(intervalTime.Milliseconds()),
-		//		"fill":     "forwards",
-		//	},
-		//
-
-		//ord.GsapAnimation = animation
-
-		frame := createFrames(wordsN, wi, time.Duration(lineTime))
-		log.Println("linetime", lineTime)
-		word.GsapAnimation = word.Ele.Call("animate", js.ValueOf(frame), map[string]interface{}{
-			"duration": time.Duration(lineTime).Milliseconds(),
-			"easing":   "linear",
-			"fill":     "forwards",
-		})
-
 		upAnimateTime := duration.Milliseconds() + 700
 		aimt := word.Ele.Call("animate", []interface{}{
 			map[string]interface{}{},
@@ -361,28 +203,60 @@ func addLyric(index int, lrcs *lyrics.Lyrics) {
 				"fill":  "forwards",
 			},
 		)
+		word.TextUpAnimation = aimt
 
 		var bgChildren js.Value = word.Ele.Get("children")
-		letterDuration := float64(duration.Milliseconds()) / (float64(len(word.Text)) - (float64(len(word.Text))-1)*0.7)
-		chrDu := duration.Seconds() / float64(len(word.Text))
+
+		for i := 0; i < bgChildren.Length(); i++ {
+			pjsj := duration / time.Duration(bgChildren.Length())
+			baseDelay := word.Begin - currentTime
+			charDelay := pjsj * time.Duration(i)
+
+			aimt := bgChildren.Index(i).Call("animate", []interface{}{
+				map[string]interface{}{
+
+					"transform": "scale(1)",
+					"easing":    "ease-out",
+				},
+				map[string]interface{}{
+					"transform": "scale(1.15) translateX(" + fmt.Sprintf("%f", getScaleOffset(i, 1.15, word.Ele)) + "px) translateY(1%)",
+					"easing":    "ease-in",
+				},
+				map[string]interface{}{
+					"transform": "scale(1)",
+					"easing":    "ease",
+				},
+			},
+				map[string]interface{}{
+					"duration": (duration * 3 / 2).Milliseconds(),
+					"delay":    (baseDelay + charDelay - charDelay*60/100).Milliseconds(), // 通过系数控制重叠比例
+					"fill":     "forwards",
+					"easing":   "ease",
+				},
+			)
+			word.HighLightAnimations = append(word.HighLightAnimations, aimt)
+		}
+
+		/*letterDuration := float64(duration.Milliseconds()) / (float64(len(word.Text)) - (float64(len(word.Text))-1)*0.7)
+		//chrDu := duration.Seconds() / float64(len(word.Text))
 
 		for i := 0; i < bgChildren.Length(); i++ {
 
 			item := bgChildren.Index(i)
 
-			var charWidth = item.Get("offsetWidth").Float()
-			var oldV = charWidth / chrDu
-			var ope = float64(bglw) + charWidth
-			var nT = ope / oldV
-			hlga := gsap.Call("to", item, map[string]interface{}{
-				// duration单位为秒
-				"duration": nT,
-				"ease":     "none",
-				"--p":      fmt.Sprintf("%vpx", ope),
-				// 延时触发
-				"delay": float64(i)*chrDu + intervalTime.Seconds(),
-			})
-			word.HighLightBackgroungAnimation = append(word.HighLightBackgroungAnimation, hlga)
+			//var charWidth = item.Get("offsetWidth").Float()
+			//var oldV = charWidth / chrDu
+			//var ope = float64(bglw) + charWidth
+			//var nT = ope / oldV
+			//hlga := gsap.Call("to", item, map[string]interface{}{
+			//	// duration单位为秒
+			//	"duration": nT,
+			//	"ease":     "none",
+			//	"--p":      fmt.Sprintf("%vpx", ope),
+			//	// 延时触发
+			//	"delay": float64(i)*chrDu + intervalTime.Seconds(),
+			//})
+			//word.HighLightBackgroungAnimation = append(word.HighLightBackgroungAnimation, hlga)
 
 			//const letterDuration = totalDuration / (letterCount - (letterCount - 1) * overlapRatio);
 			//const startTime = index * letterDuration * (1 - overlapRatio);
@@ -410,11 +284,11 @@ func addLyric(index int, lrcs *lyrics.Lyrics) {
 			},
 
 				map[string]interface{}{
-					"duration": letterDuration * 1.5,
+					"duration": 2000,
 					"fill":     "forwards",
 					//"delay":    float64((i)*4)/10*float64(duration.Milliseconds())/float64(bgChildren.Length()) + float64(intervalTime.Milliseconds()*95/100),
 					//"delay": float64(i)*float64(duration.Milliseconds())*0.2 - float64(duration.Milliseconds())*0.1*float64(i) + float64(intervalTime.Milliseconds()*95/100),
-					"delay": startTime + float64(intervalTime.Milliseconds()*95/100),
+					"delay": startTime + float64(intervalTime.Milliseconds()*70/100),
 				},
 			)
 
@@ -471,8 +345,8 @@ func addLyric(index int, lrcs *lyrics.Lyrics) {
 		//aimt.Call("addEventListener", "finish", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		//	word.Ele.Get("style").Set("transform", "translateY(5px)")
 		//	return nil
-		//}))
-		word.TextUpAnimation = aimt
+		//}))*/
+
 	}
 
 }
@@ -487,8 +361,28 @@ function getScaleOffset(index, scale) {
 func getScaleOffset(index int, scale float64, dom js.Value) float64 {
 	chars := dom.Get("children")
 	centerIndex := (chars.Length() - 1) / 2
+
+	/*centerIndex := (chars.Length() - 1) / 2
 	baseWidth := chars.Index(0).Get("offsetWidth").Float()
-	return float64(index-centerIndex) * baseWidth * (scale - 1) * 0.5
+	return float64(index-centerIndex) * baseWidth * (scale - 1) * 0.5*/
+
+	// Calculate the cumulative width up to the current character
+	cumulativeWidth := 0.0
+	for i := 0; i < index; i++ {
+		//cumulativeWidth += doms[i].offsetWidth;
+		cumulativeWidth += chars.Index(i).Get("offsetWidth").Float()
+	}
+
+	// Calculate the cumulative width up to the center character
+	centerCumulativeWidth := 0.0
+	for i := 0; i < centerIndex; i++ {
+		//centerCumulativeWidth += doms[i].offsetWidth;
+		centerCumulativeWidth += chars.Index(i).Get("offsetWidth").Float()
+	}
+
+	// The offset is the difference between current position and center position,
+	// multiplied by the scale factor
+	return (cumulativeWidth - centerCumulativeWidth) * (scale - 1) * 0.5
 }
 
 func getLastOffsetTime(index int, line *lyrics.Line) time.Duration {
@@ -672,12 +566,18 @@ func getFPX(width, height, fr float64) float64 {
 }
 */
 
-func createFrames(blocks []*lyrics.Block, index int, lineTime time.Duration) []interface{} {
+func createFrames(blocks []*lyrics.Block, index int, lineTime time.Duration, fadeRatio float64) []interface{} {
 	var frames []interface{}
+
+	/*backgroundImage, backgroundSize, backgroungPX, _ := generateBackgroundFadeStyle(blocks[index].Ele.Get("offsetWidth").Float(), blocks[index].Ele.Get("offsetHeight").Float(), fadeRatio)
+	blocks[index].Ele.Get("style").Set("backgroundImage", backgroundImage)
+	blocks[index].Ele.Get("style").Set("backgroundSize", backgroundSize)
+	blocks[index].Ele.Get("style").Set("backgroundPositionX", fmt.Sprintf("%vpx", backgroungPX))*/
+
 	ElWidth := blocks[index].Ele.Get("offsetWidth").Float()
 	ElHeight := blocks[index].Ele.Get("offsetHeight").Float()
 	hr := ElHeight * fadeRatio
-	fbw := ElWidth + hr
+	fbw := ElWidth + hr - 2
 
 	// 计算总持续时间(以最后一个单词的结束时间为准)
 	totalDuration := lineTime
@@ -779,6 +679,11 @@ func createFrames(blocks []*lyrics.Block, index int, lineTime time.Duration) []i
 		}
 		lastTimeStamp += fadeDuration
 	}
-
+	if len(frames) > 0 {
+		if lastFrame, ok := frames[len(frames)-1].(map[string]interface{}); ok {
+			lastFrame["offset"] = 1.0
+		}
+	}
+	log.Println(blocks[index].Text)
 	return frames
 }

@@ -54,6 +54,8 @@ func ParseTTML(raw string, maindom js.Value) (*lyrics.Lyrics, error) {
 		if err != nil {
 			return nil, errors.New("invalid index")
 		}
+
+		isAgent := index%2 == 0
 		if (index % 2) != 0 {
 			item.Ele.Get("style").Set("left", "10px")
 			item.Ele.Get("style").Set("right", "auto")
@@ -66,30 +68,46 @@ func ParseTTML(raw string, maindom js.Value) (*lyrics.Lyrics, error) {
 		}
 		item.Primary.Ele.Get("classList").Call("add", "main_lrc")
 
-		segments := seg.Segment([]byte(item.Primary.Ele.Get("innerText").String()))
+		//segments := seg.Segment([]byte(item.Primary.Ele.Get("innerText").String()))
 		// 处理分词结果, 普通模式
-		fmt.Println(gse.ToString(segments))
+		fmt.Println(seg.Cut(item.Primary.Ele.Get("innerText").String()))
 		maindom.Call("append", item.Ele)
 		if len(item.Primary.Translates) != 0 {
 			item.Ele.Call("append", item.Primary.TranslateEle)
 		}
 		if len(item.Backgrounds) != 0 {
-			bgEle := document.Call("createElement", "div")
-			bgEle.Get("classList").Call("add", "bg")
-			item.BackgroundsEle = bgEle
+
 			for _, item2 := range item.Backgrounds {
+				bgEle := document.Call("createElement", "div")
+				bgEle.Get("classList").Call("add", "lyric_item")
+				bgEle.Get("classList").Call("add", "background")
+				//item.BackgroundsEle = bgEle
+				//item2.Ele = bgEle
 				item2.Ele.Get("classList").Call("add", "text")
+
+				if isAgent {
+					bgEle.Get("classList").Call("add", "right")
+					bgEle.Get("style").Set("right", "15px")
+					bgEle.Get("style").Set("left", "auto")
+					bgEle.Get("style").Set("transform-origin", "right")
+				} else {
+					bgEle.Get("style").Set("left", "15px")
+					bgEle.Get("style").Set("right", "auto")
+					bgEle.Get("style").Set("transform-origin", "left")
+				}
+
 				bgEle.Call("append", item2.Ele)
+
 				if len(item2.Translates) != 0 {
 					item2.TranslateEle.Get("classList").Call("add", "translation")
 					bgEle.Call("append", item2.TranslateEle)
 				}
 
-				//if item2.End > item.Primary.End {
-				//	item.Primary.End = item2.End
-				//}
-
-				item.Ele.Call("append", bgEle)
+				if item2.End > item.Primary.End {
+					item.Primary.End = item2.End
+				}
+				item2.Ele = bgEle
+				maindom.Call("append", bgEle)
 			}
 		}
 
@@ -102,9 +120,9 @@ func ParseTTML(raw string, maindom js.Value) (*lyrics.Lyrics, error) {
 			item3.Ele.Get("style").Set("backgroundImage", backgroundImage)
 			item3.Ele.Get("style").Set("backgroundSize", backgroundSize)
 			item3.Ele.Get("style").Set("backgroundPositionX", fmt.Sprintf("%vpx", backgroungPX))
-			fmt.Println(backgroundImage, backgroundSize, backgroungPX)
+			//fmt.Println(backgroundImage, backgroundSize, backgroungPX)
 
-			if time.Duration(item3.End-item3.Begin) > time.Duration(1000)*time.Millisecond && len(item3.Text) < 8 {
+			if time.Duration(item3.End-item3.Begin) > time.Duration(1000)*time.Millisecond && len(item3.Text) < 100 {
 				text := item3.Ele.Get("innerHTML").String()
 				item3.Ele.Set("innerHTML", "")
 				for _, ite := range text {
@@ -112,8 +130,14 @@ func ParseTTML(raw string, maindom js.Value) (*lyrics.Lyrics, error) {
 					blank.Set("className", "hl_text")
 					blank.Set("innerHTML", js.ValueOf(string(ite)))
 					blank.Call("setAttribute", "data-text", string(ite))
-					blank.Get("style").Call("setProperty", "--p", "0px")
+					//blank.Get("style").Call("setProperty", "--p", "0px")
+
 					item3.Ele.Call("append", blank)
+					backgroundImage, backgroundSize, backgroungPX, _ := generateBackgroundFadeStyle(blank.Get("offsetWidth").Float(), blank.Get("offsetHeight").Float(), fadeRatio)
+					backgroungPX += 2
+					blank.Get("style").Set("backgroundImage", backgroundImage)
+					blank.Get("style").Set("backgroundSize", backgroundSize)
+					blank.Get("style").Set("backgroundPositionX", fmt.Sprintf("%vpx", backgroungPX))
 				}
 			}
 		}
@@ -249,7 +273,7 @@ func parseContent(p *html.Node, mainAgent, defaultAgent string) (*lyrics.Content
 				textele.Get("style").Call("setProperty", "--color", "0.2")
 				//textele.Get("style").Call("setProperty", "--p", fmt.Sprintf("%vpx", 0))
 
-				textele.Get("style").Call("setProperty", "--rp", "0%")
+				//textele.Get("style").Call("setProperty", "--rp", "0%")
 				textele.Get("style").Call("setProperty", "--rcolor", "1")
 				textele.Get("style").Set("transform", "translateY(10px)")
 
@@ -322,10 +346,11 @@ func parseContent(p *html.Node, mainAgent, defaultAgent string) (*lyrics.Content
 	}
 
 	return &lyrics.Content{
-		Primary:     primary,
-		Backgrounds: backgrounds,
-		Ele:         lrccitem,
-		Agent:       agent,
+		Primary:         primary,
+		Backgrounds:     backgrounds,
+		Ele:             lrccitem,
+		Agent:           agent,
+		ShowBackgrounds: false,
 	}, nil
 }
 

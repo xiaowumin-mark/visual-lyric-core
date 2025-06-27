@@ -22,13 +22,14 @@ var (
 	// setInterval   js.Value = js.Global().Get("setInterval")
 	// clearTimeout  js.Value = js.Global().Get("clearTimeout")
 	// clearInterval js.Value = js.Global().Get("clearInterval")
-	bglw       = 100
-	fadeRatio  = 1.0
-	dialogEle  = document.Call("getElementById", "dialog")
-	musicInput = document.Call("getElementById", "ex_music")
-	coverInput = document.Call("getElementById", "ex_cover")
-	ttmlInput  = document.Call("getElementById", "ex_ttml")
-	compBtn    = document.Call("getElementById", "comp_ex")
+	bglw        = 100
+	fadeRatio   = 0.5
+	bgfadeRatio = fadeRatio * 2
+	dialogEle   = document.Call("getElementById", "dialog")
+	musicInput  = document.Call("getElementById", "ex_music")
+	coverInput  = document.Call("getElementById", "ex_cover")
+	ttmlInput   = document.Call("getElementById", "ex_ttml")
+	compBtn     = document.Call("getElementById", "comp_ex")
 )
 
 var previousIndex = make([]int, 0)
@@ -178,10 +179,10 @@ func start(lrcText string, bgsrc string, lrcView js.Value) {
 			audio.Call("play")
 			return nil
 		}))
-		GsetTimeout(func() {
-			item.Ele.Get("style").Set("transition", trans)
-			item.Ele.Get("style").Set("opacity", "1")
-		}, 100*time.Millisecond)
+		//GsetTimeout(func() {
+		//	item.Ele.Get("style").Set("transition", trans)
+		//	item.Ele.Get("style").Set("opacity", "1")
+		//}, 100*time.Millisecond)
 
 	}
 
@@ -201,6 +202,17 @@ func start(lrcText string, bgsrc string, lrcView js.Value) {
 		} else if args[0].Get("code").String() == "ArrowLeft" {
 			// 快退
 			audio.Set("currentTime", audio.Get("currentTime").Float()-5)
+		} else if args[0].Get("code").String() == "ArrowUp" {
+			// 音量加
+			if audio.Get("volume").Float() < 1 {
+				audio.Set("volume", audio.Get("volume").Float()+0.1)
+			}
+
+		} else if args[0].Get("code").String() == "ArrowDown" {
+			// 音量减
+			if audio.Get("volume").Float() > 0 {
+				audio.Set("volume", audio.Get("volume").Float()-0.1)
+			}
 		}
 		return nil
 	}))
@@ -256,10 +268,14 @@ func pauseLrc(lrcs *lyrics.Lyrics) {
 			if !item1.TextUpAnimation.IsUndefined() && !item1.TextUpAnimation.IsNull() && item1.TextUpAnimation.Type() == js.TypeObject {
 				item1.TextUpAnimation.Call("pause")
 			}
-			//item1.GsapAnimation.Call("pause")
-			if !item1.GsapAnimation.IsUndefined() && !item1.GsapAnimation.IsNull() && item1.GsapAnimation.Type() == js.TypeObject {
-				item1.GsapAnimation.Call("pause")
+
+			for _, item_animate := range item1.Animation {
+				if !item_animate.IsUndefined() && !item_animate.IsNull() && item_animate.Type() == js.TypeObject {
+					item_animate.Call("pause")
+				}
 			}
+			//item1.GsapAnimation.Call("pause")
+
 			// item1.HighLightAnimations []
 			for _, item2 := range item1.HighLightAnimations {
 				item2.Call("pause")
@@ -271,8 +287,13 @@ func pauseLrc(lrcs *lyrics.Lyrics) {
 				if !item3.TextUpAnimation.IsUndefined() && !item3.TextUpAnimation.IsNull() && item3.TextUpAnimation.Type() == js.TypeObject {
 					item3.TextUpAnimation.Call("pause")
 				}
-				if !item3.GsapAnimation.IsUndefined() && !item3.GsapAnimation.IsNull() && item3.GsapAnimation.Type() == js.TypeObject {
-					item3.GsapAnimation.Call("pause")
+				//if !item3.GsapAnimation.IsUndefined() && !item3.GsapAnimation.IsNull() && item3.GsapAnimation.Type() == js.TypeObject {
+				//	item3.GsapAnimation.Call("pause")
+				//}
+				for _, item_animate := range item3.Animation {
+					if !item_animate.IsUndefined() && !item_animate.IsNull() && item_animate.Type() == js.TypeObject {
+						item_animate.Call("pause")
+					}
 				}
 				for _, item4 := range item3.HighLightAnimations {
 					item4.Call("pause")
@@ -286,8 +307,10 @@ func playLrc(lrcs *lyrics.Lyrics) {
 	for _, index := range nowPlayingIndex {
 		item := lrcs.Contents[index]
 		for _, item1 := range item.Primary.Blocks {
-			if !item1.GsapAnimation.IsUndefined() && !item1.GsapAnimation.IsNull() && item1.GsapAnimation.Get("overallProgress").Float() != float64(1) {
-				item1.GsapAnimation.Call("play")
+			for _, item_animate := range item1.Animation {
+				if !item_animate.IsUndefined() && !item_animate.IsNull() && item_animate.Type() == js.TypeObject {
+					item_animate.Call("play")
+				}
 			}
 			if !item1.TextUpAnimation.IsUndefined() && !item1.TextUpAnimation.IsNull() && item1.TextUpAnimation.Get("overallProgress").Float() != float64(1) {
 				item1.TextUpAnimation.Call("play")
@@ -304,8 +327,10 @@ func playLrc(lrcs *lyrics.Lyrics) {
 				if !item3.TextUpAnimation.IsUndefined() && !item3.TextUpAnimation.IsNull() {
 					item3.TextUpAnimation.Call("play")
 				}
-				if !item3.GsapAnimation.IsUndefined() && !item3.GsapAnimation.IsNull() {
-					item3.GsapAnimation.Call("play")
+				for _, item_animate := range item3.Animation {
+					if !item_animate.IsUndefined() && !item_animate.IsNull() && item_animate.Type() == js.TypeObject {
+						item_animate.Call("play")
+					}
 				}
 
 				for _, item4 := range item3.HighLightAnimations {
@@ -384,19 +409,22 @@ func gd(currentIndex int, lrc *lyrics.Lyrics, init bool) {
 	fmt.Println("滚动", currentIndex)
 	for index, item := range lrc.Contents {
 
-		if index == currentIndex {
-			it := lrc.Contents[index]
-			if len(it.Backgrounds) != 0 {
-				it.BackgroundsEle.Get("style").Set("display", "block")
-				GsetTimeout(func() {
-					it.BackgroundsEle.Get("classList").Call("add", "bgShow")
-				}, 10*time.Millisecond)
-			}
-		}
+		item.Ele.Get("style").Set("filter", fmt.Sprintf("blur(%vpx)", mathAbs(index-currentIndex)))
+		//if index == currentIndex {
+		//	it := lrc.Contents[index]
+		//	if len(it.Backgrounds) != 0 {
+		//		it.BackgroundsEle.Get("style").Set("display", "block")
+		//		GsetTimeout(func() {
+		//			it.BackgroundsEle.Get("classList").Call("add", "bgShow")
+		//		}, 10*time.Millisecond)
+		//	}
+		//}
+
 		// 计算当前歌词到目标歌词的累计高度
-		top := getTopHeight(lrc, currentIndex, index)
+		top := getTopHeight(lrc, currentIndex, index, -1)
+
 		//top := js.Global().Call("getTopHeight", currentIndex, index).Int()
-		item.Position = top
+		item.Primary.Position = top
 		// 添加弹性动画延迟（与 JS 的 elastic.out 对齐）
 		var delay time.Duration
 		var duration = 1.2
@@ -433,6 +461,32 @@ func gd(currentIndex int, lrc *lyrics.Lyrics, init bool) {
 					"ease":     "elastic.out(1, 1.35)",
 				})
 			}, delay)
+			offset := 0
+			for bi, Bitem := range item.Backgrounds {
+				//log.Println("背景", bgindex)
+				/*btop := getTopHeight(lrc, currentIndex, index, bgindex)
+				Bitem.Position = btop
+				gsap.Call("to", Bitem.Ele, map[string]interface{}{
+					"y":        fmt.Sprintf("%dpx", btop),
+					"duration": 0,
+					//"ease":     "elastic.out(1, 1.35)",
+				})*/
+				if bi == 0 {
+					offset += item.Ele.Get("offsetHeight").Int()
+				} else {
+					offset += item.Backgrounds[bi-1].Ele.Get("offsetHeight").Int()
+				}
+
+				Bitem.Position = top + offset
+				GsetTimeout(func() {
+					gsap.Call("to", Bitem.Ele, map[string]interface{}{
+						"y":        fmt.Sprintf("%dpx", Bitem.Position),
+						"duration": 1.2,
+						"ease":     "elastic.out(1, 1.35)",
+					})
+				}, delay)
+				//Bitem.Ele.Get("style").Set("top", fmt.Sprintf("%dpx", Bitem.Position))
+			}
 		} else {
 			//item.Ele.Get("style").Set("transition", "none")
 			//item.Ele.Get("style").Call("setProperty", "--top", fmt.Sprintf("%dpx", item.Position))
@@ -472,9 +526,17 @@ func rPosition(lrc *lyrics.Lyrics) {
 		i = in[0]
 	}
 	for index, item := range lrc.Contents {
-		top := getTopHeight(lrc, i, index)
+		top := getTopHeight(lrc, i, index, -1)
+		for bgindex, Bitem := range item.Backgrounds {
+			Bitem.Position = getTopHeight(lrc, i, index, bgindex)
+			gsap.Call("to", item.Ele, map[string]interface{}{
+				"y":        fmt.Sprintf("%dpx", Bitem.Position),
+				"duration": 0,
+				//"ease":     "elastic.out(1, 1.35)",
+			})
+		}
 		item.Ele.Get("style").Call("setProperty", "transform", "translate(0px,"+strconv.Itoa(top)+"px)")
-		item.Position = top
+		item.Primary.Position = top
 	}
 }
 func getCurrentTime(audio js.Value) time.Duration {
@@ -521,22 +583,92 @@ func filterCurrentIndex(currentIndex []int, nowPlayingIndex []int) []interface{}
 	return result
 }
 
-func getTopHeight(lrc *lyrics.Lyrics, now, to int) int {
+/*func getTopHeight(lrc *lyrics.Lyrics, now, to, bgIndex int) int {
 	var res int = 0
 	if to > now {
 		for i := now; i < to; i++ {
 			// 强制布局更新
 			h := lrc.Contents[i].Ele.Get("clientHeight").Int()
-			res += h + 10
+			res += h + 10 // 行间距为10
+
+			for _, Bitem := range lrc.Contents[i].Backgrounds {
+				res += Bitem.Ele.Get("clientHeight").Int()
+			}
+			if bgIndex >= 0 && i == now {
+
+				//log.Println("计算滚动的时候遇到我了，index", to, "滚向", now)
+				//log.Println("背景数量", len(lrc.Contents[i].Backgrounds))
+				//log.Println("i", i)
+				for _, e := range lrc.Contents[i].Primary.Blocks {
+					fmt.Print(e.Text)
+				}
+				fmt.Println()
+				for q := 0; q < bgIndex+1; q++ {
+					log.Println("top", q)
+					res += lrc.Contents[i].Backgrounds[q].Ele.Get("clientHeight").Int()
+				}
+			}
+
 		}
 	} else {
 		for j := now; j > to; j-- {
 			// 强制布局更新
 			h := lrc.Contents[j-1].Ele.Get("clientHeight").Int()
-			res -= h + 10
+			res -= h + 10 // 行间距为10
+			for _, Bitem := range lrc.Contents[j-1].Backgrounds {
+				res -= Bitem.Ele.Get("clientHeight").Int()
+			}
+			if bgIndex >= 0 && j-1 == now {
+				for q := 0; q < bgIndex+1; q++ {
+
+					res -= lrc.Contents[j-1].Backgrounds[q].Ele.Get("clientHeight").Int()
+				}
+			}
 		}
 	}
-	return res + 200
+
+	return res + 400// 偏移400
+}*/
+
+func getTopHeight(lrc *lyrics.Lyrics, now, to, bgIndex int) int {
+	res := 0
+
+	if to > now {
+		for i := now; i < to; i++ {
+			h := lrc.Contents[i].Ele.Get("clientHeight").Int()
+			res += h
+			if lrc.Contents[i].ShowBackgrounds {
+
+				for _, Bitem := range lrc.Contents[i].Backgrounds {
+					res += Bitem.Ele.Get("clientHeight").Int()
+				}
+			}
+		}
+		// 单独处理“滚到的是自己且是某个背景歌词”
+		/*if bgIndex >= 0 && to < len(lrc.Contents) {
+			for q := 0; q <= bgIndex && q < len(lrc.Contents[to].Backgrounds); q++ {
+				res += lrc.Contents[to].Backgrounds[q].Ele.Get("clientHeight").Int()
+			}
+		}*/
+	} else {
+		for j := now; j > to; j-- {
+			h := lrc.Contents[j-1].Ele.Get("clientHeight").Int()
+			res -= h
+			if lrc.Contents[j-1].ShowBackgrounds {
+				for _, Bitem := range lrc.Contents[j-1].Backgrounds {
+					res -= Bitem.Ele.Get("clientHeight").Int()
+				}
+			}
+		}
+		// 单独处理“滚到的是自己且是某个背景歌词”
+		/*if bgIndex >= 0 && to >= 0 {
+			for q := 0; q <= bgIndex && q < len(lrc.Contents[to].Backgrounds); q++ {
+				res -= lrc.Contents[to].Backgrounds[q].Ele.Get("clientHeight").Int()
+			}
+		}*/
+	}
+
+	return res + 200 // 偏移
 }
 
 //func getTopHeight(lrc *lyrics.Lyrics, now, to int) int {

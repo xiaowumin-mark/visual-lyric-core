@@ -40,7 +40,8 @@ type Content struct {
 	ScrollAnimation js.Value
 	Agent           string
 	Index           int
-	Position        int
+	//Position        int
+	ShowBackgrounds bool
 }
 
 // Line 结构体表示一行歌词
@@ -52,6 +53,7 @@ type Line struct {
 	Blocks       []*Block          // 歌词块
 	Ele          js.Value
 	TranslateEle js.Value
+	Position     int
 	Splits       []string
 }
 
@@ -61,7 +63,7 @@ type Block struct {
 	End                          time.Duration // 结束时间（毫秒）
 	Text                         string        // 文本内容
 	Ele                          js.Value
-	GsapAnimation                js.Value
+	Animation                    []js.Value
 	TextUpAnimation              js.Value
 	HighLightAnimations          []js.Value
 	HighLightBackgroungAnimation []js.Value
