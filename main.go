@@ -31,7 +31,7 @@ var (
 	ttmlInput   = document.Call("getElementById", "ex_ttml")
 	compBtn     = document.Call("getElementById", "comp_ex")
 )
-
+var fr js.Func
 var previousIndex = make([]int, 0)
 var nowPlayingIndex = make([]int, 0)
 var innerHeightShowItemNum = 10
@@ -147,6 +147,7 @@ func main() {
 			dialogEle.Get("classList").Call("add", "show")
 		} else {
 			audio.Set("src", "/music/"+musicName+"."+musicType)
+			audio.Call("load")
 			bgsrc = "/music/" + musicName + ".png"
 			lrcText = getLrcText("/music/"+musicName+".ttml", "text").String()
 
@@ -216,8 +217,20 @@ func start(lrcText string, bgsrc string, lrcView js.Value) {
 		}
 		return nil
 	}))
+	document.Call("addEventListener", "dblclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		if audio.Get("paused").Bool() {
+			audio.Call("play")
+			//playLrc(vld)
+		} else {
+			audio.Call("pause")
+			//pauseLrc(vld)
+		}
+		return nil
+	}))
 	audio.Call("addEventListener", "play", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		playLrc(vld)
+
+		js.Global().Call("requestAnimationFrame", fr)
 		return nil
 	}))
 	audio.Call("addEventListener", "pause", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
@@ -231,30 +244,55 @@ func start(lrcText string, bgsrc string, lrcView js.Value) {
 		rPosition(vld)
 		return nil
 	}))
-	GsetInterval(
-		func() {
-			if audio.Get("paused").Bool() {
-				return
-			}
-			currentIndex := make([]int, 0)
-			var currentTime time.Duration = getCurrentTime(audio)
+	//GsetInterval(
+	//	func() {
+	//		if audio.Get("paused").Bool() {
+	//			return
+	//		}
+	//		currentIndex := make([]int, 0)
+	//		var currentTime time.Duration = getCurrentTime(audio)
+	//
+	//		for i := 0; i < len(vld.Contents); i++ {
+	//			v := vld.Contents[i]
+	//			if currentTime >= v.Primary.Begin && currentTime <= v.Primary.End {
+	//				currentIndex = append(currentIndex, i)
+	//			}
+	//		}
+	//
+	//		// 只有当 currentIndex 发生变化时才触发歌词变化处理
+	//		if !every(currentIndex, previousIndex) {
+	//			handleLyricsChange(vld, currentIndex)
+	//			previousIndex = make([]int, len(currentIndex)) // 深拷贝
+	//			copy(previousIndex, currentIndex)
+	//		}
+	//	},
+	//	50*time.Millisecond,
+	//)
 
-			for i := 0; i < len(vld.Contents); i++ {
-				v := vld.Contents[i]
-				if currentTime >= v.Primary.Begin && currentTime <= v.Primary.End {
-					currentIndex = append(currentIndex, i)
-				}
-			}
+	fr = js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		if audio.Get("paused").Bool() {
+			return nil
+		}
+		currentIndex := make([]int, 0)
+		var currentTime time.Duration = getCurrentTime(audio)
 
-			// 只有当 currentIndex 发生变化时才触发歌词变化处理
-			if !every(currentIndex, previousIndex) {
-				handleLyricsChange(vld, currentIndex)
-				previousIndex = make([]int, len(currentIndex)) // 深拷贝
-				copy(previousIndex, currentIndex)
+		for i := 0; i < len(vld.Contents); i++ {
+			v := vld.Contents[i]
+			if currentTime >= v.Primary.Begin && currentTime <= v.Primary.End {
+				currentIndex = append(currentIndex, i)
 			}
-		},
-		20*time.Millisecond,
-	)
+		}
+
+		// 只有当 currentIndex 发生变化时才触发歌词变化处理
+		if !every(currentIndex, previousIndex) {
+			handleLyricsChange(vld, currentIndex)
+			previousIndex = make([]int, len(currentIndex)) // 深拷贝
+			copy(previousIndex, currentIndex)
+		}
+		js.Global().Call("requestAnimationFrame", fr)
+		return nil
+	})
+	js.Global().Call("requestAnimationFrame", fr)
 
 	<-c
 }
@@ -432,7 +470,7 @@ func gd(currentIndex int, lrc *lyrics.Lyrics, init bool) {
 			delay = 0
 			duration = 0
 		} else {
-			delay = time.Duration(mathAbs(currentIndex-index-3)*40) * time.Millisecond
+			delay = time.Duration(mathAbs(currentIndex-index-3)*50) * time.Millisecond
 
 		}
 		//if !item.ScrollAnimation.IsUndefined() && !item.ScrollAnimation.IsNull() {

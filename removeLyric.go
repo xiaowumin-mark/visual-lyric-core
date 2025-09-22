@@ -9,7 +9,10 @@ import (
 )
 
 func removeLyric(index int, lrcs *lyrics.Lyrics) {
-
+	haveMoreLine := false
+	if len(nowPlayingIndex) > 1 {
+		haveMoreLine = true
+	}
 	removeIndex(index)
 	gsap.Call("to", lrcs.Contents[index].Ele, map[string]interface{}{
 		"duration": 0.6,
@@ -86,6 +89,27 @@ func removeLyric(index int, lrcs *lyrics.Lyrics) {
 	//		hasScrolledInRemove = true // 设置标志位，表示已经在 remove 中触发了滚动
 	//	}
 	//}
+
+	//GsetTimeout(func() {
+	/*bb := bubbleSort(nowPlayingIndex)
+	if len(bb) > 0 {
+		gd(bb[0], lrcs, false)
+	} else {
+		gd(index, lrcs, false)
+
+	}*/
+
+	if haveMoreLine {
+		bb := bubbleSort(nowPlayingIndex)
+		if len(bb) > 0 {
+			gd(bb[0], lrcs, false)
+		} else {
+			gd(index, lrcs, false)
+
+		}
+	}
+
+	//}, 0*time.Millisecond)
 }
 
 func cancelWord(word *lyrics.Block) {

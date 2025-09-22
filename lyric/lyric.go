@@ -51,6 +51,7 @@ type Line struct {
 	Translates   map[string]string // 翻译内容（语言代码 -> 翻译文本）
 	Duet         bool              // 是否为对唱
 	Blocks       []*Block          // 歌词块
+	WrdList      [][]int
 	Ele          js.Value
 	TranslateEle js.Value
 	Position     int

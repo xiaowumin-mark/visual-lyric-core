@@ -70,7 +70,15 @@ func ParseTTML(raw string, maindom js.Value) (*lyrics.Lyrics, error) {
 
 		//segments := seg.Segment([]byte(item.Primary.Ele.Get("innerText").String()))
 		// 处理分词结果, 普通模式
-		fmt.Println(seg.Cut(item.Primary.Ele.Get("innerText").String()))
+		//wordList := seg.Cut(item.Primary.Ele.Get("innerText").String())
+		//fmt.Println(wordList, len(wordList))
+
+		// 分词，以空格分割单词
+		//wordList := strings.Split(item.Primary.Ele.Get("innerText").String(), " ")
+		//fmt.Println(wordList, len(wordList))
+		sp := splitBySpace(item.Primary.Blocks)
+		fmt.Println("wordList", sp)
+		item.Primary.WrdList = sp
 		maindom.Call("append", item.Ele)
 		if len(item.Primary.Translates) != 0 {
 			item.Ele.Call("append", item.Primary.TranslateEle)
@@ -122,7 +130,7 @@ func ParseTTML(raw string, maindom js.Value) (*lyrics.Lyrics, error) {
 			item3.Ele.Get("style").Set("backgroundPositionX", fmt.Sprintf("%vpx", backgroungPX))
 			//fmt.Println(backgroundImage, backgroundSize, backgroungPX)
 
-			if time.Duration(item3.End-item3.Begin) > time.Duration(1000)*time.Millisecond && len(item3.Text) < 100 {
+			/*if time.Duration(item3.End-item3.Begin) > time.Duration(1000)*time.Millisecond && len(item3.Text) < 100 {
 				text := item3.Ele.Get("innerHTML").String()
 				item3.Ele.Set("innerHTML", "")
 				for _, ite := range text {
@@ -139,7 +147,45 @@ func ParseTTML(raw string, maindom js.Value) (*lyrics.Lyrics, error) {
 					blank.Get("style").Set("backgroundSize", backgroundSize)
 					blank.Get("style").Set("backgroundPositionX", fmt.Sprintf("%vpx", backgroungPX))
 				}
+			}*/
+		}
+
+		for _, word := range sp {
+
+			//startTime := item.Primary.Blocks[word[0]].Begin
+			//endTime := item.Primary.Blocks[word[len(word)-1]].End
+			var duration time.Duration
+			text := ""
+			for i := word[0]; i <= word[len(word)-1]; i++ {
+				//wordDuration := item.Primary.Blocks[i].End - item.Primary.Blocks[i].Begin
+				text += item.Primary.Blocks[i].Text
+				wordDuration := item.Primary.Blocks[i].End - item.Primary.Blocks[i].Begin
+				duration += wordDuration
 			}
+			if duration > time.Duration(1000)*time.Millisecond && len(text) < 100 {
+				for i := word[0]; i <= word[len(word)-1]; i++ {
+
+					wordText := item.Primary.Blocks[i].Text
+					item.Primary.Blocks[i].Ele.Set("innerHTML", "")
+
+					for _, ite := range wordText {
+						var blank = document.Call("createElement", "div")
+						blank.Set("className", "hl_text")
+						blank.Set("innerHTML", js.ValueOf(string(ite)))
+						blank.Call("setAttribute", "data-text", string(ite))
+						//blank.Get("style").Call("setProperty", "--p", "0px")
+
+						item.Primary.Blocks[i].Ele.Call("append", blank)
+						backgroundImage, backgroundSize, backgroungPX, _ := generateBackgroundFadeStyle(blank.Get("offsetWidth").Float(), blank.Get("offsetHeight").Float(), fadeRatio)
+						backgroungPX += 2
+						blank.Get("style").Set("backgroundImage", backgroundImage)
+						blank.Get("style").Set("backgroundSize", backgroundSize)
+						blank.Get("style").Set("backgroundPositionX", fmt.Sprintf("%vpx", backgroungPX))
+					}
+				}
+
+			}
+
 		}
 
 	}
@@ -456,4 +502,64 @@ func initLrcBackground(lrc *lyrics.Lyrics) {
 			pitem.Ele.Get("style").Set("backgroundPositionX", fmt.Sprintf("%vpx", backgroungPX))
 		}
 	}
+}
+
+/*def split_by_space(arr):
+  result = []
+  current_word_indices = []
+
+  for index, element in enumerate(arr):
+      if element == " ":
+          if current_word_indices:
+              result.append(current_word_indices)
+              current_word_indices = []
+      else:
+          current_word_indices.append(index)
+
+  if current_word_indices:
+      result.append(current_word_indices)
+
+  return result*/
+
+func splitBySpace(arr []*lyrics.Block) [][]int {
+	var result [][]int
+	var currentWordIndices []int
+
+	for index, element := range arr {
+		if element.Begin == 0 && element.End == 0 {
+			if currentWordIndices != nil {
+				result = append(result, currentWordIndices)
+				currentWordIndices = nil
+			}
+		} else {
+			//currentWordIndices = append(currentWordIndices, index)
+			if isSingleChineseChar(element.Text) {
+				if currentWordIndices != nil {
+					result = append(result, currentWordIndices)
+					currentWordIndices = nil
+				}
+				result = append(result, []int{index})
+			} else {
+				currentWordIndices = append(currentWordIndices, index)
+			}
+		}
+	}
+	if currentWordIndices != nil {
+		result = append(result, currentWordIndices)
+	}
+	return result
+}
+
+// 判断是否是中文字符（基本汉字范围）
+func isChineseChar(c rune) bool {
+	return c >= '\u4e00' && c <= '\u9fff'
+}
+
+// 判断字符串是否是单个中文字符
+func isSingleChineseChar(s string) bool {
+	if len([]rune(s)) != 1 {
+		return false
+	}
+	r := []rune(s)[0]
+	return isChineseChar(r)
 }
